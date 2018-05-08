@@ -1,23 +1,16 @@
-
-
-from flask import Flask, render_template, request, flash, jsonify
-
-app = Flask(__name__)
-
+from flask import Flask, render_template, request, flash, jsonify, url_for, redirect, make_response
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from database_setup import Base, Category, Item, User
-from datetime import datetime
-
 from flask import session as login_session
-import random, string
-
 from oauth2client.client import flow_from_clientsecrets
 from oauth2client.client import FlowExchangeError
+import random, string
 import httplib2
 import json
-from flask import make_response
 import requests
+
+app = Flask(__name__)
 
 CLIENT_ID = json.loads(open('client_secrets.json', 'r').read())['web']['client_id']
 engine = create_engine('sqlite:///categorywithusers.db')
@@ -34,48 +27,123 @@ def home_page():
     output += '</br>'
     categories = session.query(Category).all()
     for cat in categories:
-        output += cat.category
+        output += '<a href="/catalog/{0}/items">{1}</a>'.format(cat.category, cat.category)
         output += '</br>'
 
-    output += 'Last added items'
-    output += '</br>'
-    items = session.query(Item).all()
+    if 'username' in login_session:
+        output += '<a href="catalog/new">Add Item</a>'
+        output += '</br>'
+        output += '<a href="/gdisconnect">Disconnect</a>'
+        output += '</br>'
+    else:
+        output += '<a href="/login">Connect</a>'
+        output += '</br>'
 
-    for item in items:
-        last_modified = item.last_modified
-        year = last_modified.year
-        month = last_modified.month
-        day = last_modified.day
-        hour = last_modified.hour
-        minute = last_modified.minute
-        now_hour = datetime.now().hour
-        now_minute = datetime.now().minute
-        if year == datetime.now().month and month == datetime.now().month and \
-           day == datetime.now().day:
-            creation_time = hour * 60 + minute
-            now_time = now_hour * 60 + now_minute
-            if now_time - 30 <= creation_time <= now_time:
-                output += item.name
-                output += '</br>'
     return output
 
 
-"""
 @app.route('/catalog/<str:category>/items')
 def show_items(category):
+    items = session.query(Item).filter_by(category=category).all()
+    output = ''
+    for item in items:
+        output += '<a href="/catalog/{0}/{1}">{2}</a>'.format(category, item, item)
+
+    if 'username' in login_session:
+        output += '<a href="catalog/new">Add Item</a>'
+        output += '</br>'
+        output += '<a href="/gdisconnect">Disconnect</a>'
+        output += '</br>'
+    else:
+        output += '<a href="/login">Connect</a>'
+        output += '</br>'
+    return output
 
 
 @app.route('/catalog/<str:category>/<str:item>')
 def show_item(category, item):
+    output = '<div>{0}'.format(item)
+    edit_super_link = '<a href="/catalog/{0}/{1}/edit">edit</a>'.format(category, item)
+    output += edit_super_link
+    delete_super_link = '<a href="/catalog/{0}/{1}/delete">delete</a>'.format(category, item)
+    output += delete_super_link
+    output += '</div>'
+
+    if 'username' in login_session:
+        output += '<a href="/gdisconnect">Disconnect</a>'
+        output += '</br>'
+    else:
+        output += '<a href="/login">Connect</a>'
+        output += '</br>'
+    return output
 
 
-@app.route('/catalog/<str:item>/edit')
-def edit_item(item):
+@app.route('/catalog/new', methods=['GET', 'POST'])
+def new_item():
+    if 'username' not in login_session:
+        return redirect('/login')
+
+    if request.method == 'POST':
+        if request.form['name'] and request.form['category']:
+            item_to_add = Item(name=request.form['name'], category=request.form['category'],
+                               user=login_session['username'])
+            session.add(item_to_add)
+            session.commit()
+
+            new_category = request.form['category']
+            categories = session.query(Category).all()
+            i = 0
+            for category in categories:
+                if category.name == new_category:
+                    break
+                else:
+                    i += 1
+            if i == len(categories):
+                category = Category(name=request.form['category'], user=login_session['username'])
+                session.add(category)
+                session.commit()
+        return redirect('/')
+    else:
+        return render_template('add_item.html')
 
 
-@app.route('/catalog/<str:item>/delete')
-def delete_item(item):
-"""
+@app.route('/catalog/<str:category>/<str:item>/edit', methods=['GET', 'POST'])
+def edit_item(category, item):
+    if 'username' not in login_session:
+        return redirect('/login')
+
+    item_to_modify = session.query(Item).filter_by(name=item).one()
+
+    if item_to_modify.user.name != login_session['username']:
+        response = make_response(json.dumps('Permission denied.'), 403)
+        response.headers['Content-Type'] = 'application/json'
+        return response
+
+    if request.method == 'POST':
+        if request.form['name']:
+            item_to_modify.name = request.form['name']
+        session.add(item_to_modify)
+        session.commit()
+        return redirect(url_for('show_item', category=category, item=item))
+    else:
+        return render_template('edit_item.html', category=category, item=item_to_modify)
+
+
+@app.route('/catalog/<str:category>/<str:item>/delete')
+def delete_item(category, item):
+    if 'username' not in login_session:
+        return redirect('/login')
+
+    item_to_delete = session.query(Item).filter_by(name=item).one()
+
+    if item_to_delete.user_id != login_session['user_id']:
+        response = make_response(json.dumps('Permission denied.'), 403)
+        response.headers['Content-Type'] = 'application/json'
+        return response
+
+    session.delete(item_to_delete)
+    session.commit()
+    return redirect('/catalog/%s/items' % category)
 
 
 @app.route('/catalog.json')

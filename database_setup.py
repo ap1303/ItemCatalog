@@ -38,12 +38,13 @@ class Category(Base):
             'items': items,
         }
 
+
 class Item(Base):
     __tablename__ = 'Item'
 
     id = Column(Integer, primary_key=True)
     name = Column(String(80), nullable=False)
-    last_modified = Column(DateTime(), default=datetime.now())
+    description = Column(String(200), nullable=False)
     category_id = Column(Integer, ForeignKey('Category.id'))
     category = relationship(Category)
     user_id = Column(Integer, ForeignKey("User.id"))
