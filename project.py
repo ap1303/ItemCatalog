@@ -27,7 +27,7 @@ def home_page():
     output += '</br>'
     categories = session.query(Category).all()
     for cat in categories:
-        output += '<a href="/catalog/{0}/items">{1}</a>'.format(cat.category, cat.category)
+        output += '<a href="/catalog/{0}/items">{1}</a>'.format(cat.name, cat.name)
         output += '</br>'
 
     if 'username' in login_session:
@@ -42,12 +42,14 @@ def home_page():
     return output
 
 
-@app.route('/catalog/<str:category>/items')
+@app.route('/catalog/<category>/items')
 def show_items(category):
-    items = session.query(Item).filter_by(category=category).all()
+    cat = session.query(Category).filter_by(name=category).one()
+    items = session.query(Item).filter_by(category=cat).all()
     output = ''
     for item in items:
-        output += '<a href="/catalog/{0}/{1}">{2}</a>'.format(category, item, item)
+        output += '<a href="/catalog/{0}/{1}">{2}</a>'.format(category, item.name, item.name)
+        output += '</br>'
 
     if 'username' in login_session:
         output += '<a href="catalog/new">Add Item</a>'
@@ -60,15 +62,18 @@ def show_items(category):
     return output
 
 
-@app.route('/catalog/<str:category>/<str:item>')
+@app.route('/catalog/<category>/<item>')
 def show_item(category, item):
     output = '<div>{0}'.format(item)
-    output += session.query(Item).filter_by(name=item).one().description
+    output += '</br>'
     edit_super_link = '<a href="/catalog/{0}/{1}/edit">edit</a>'.format(category, item)
     output += edit_super_link
+    output += '</br>'
     delete_super_link = '<a href="/catalog/{0}/{1}/delete">delete</a>'.format(category, item)
     output += delete_super_link
+    output += '</br>'
     output += '</div>'
+    
 
     if 'username' in login_session:
         output += '<a href="/gdisconnect">Disconnect</a>'
@@ -108,7 +113,7 @@ def new_item():
         return render_template('add_item.html')
 
 
-@app.route('/catalog/<str:category>/<str:item>/edit', methods=['GET', 'POST'])
+@app.route('/catalog/<category>/<item>/edit', methods=['GET', 'POST'])
 def edit_item(category, item):
     if 'username' not in login_session:
         return redirect('/login')
@@ -130,7 +135,7 @@ def edit_item(category, item):
         return render_template('edit_item.html', category=category, item=item_to_modify)
 
 
-@app.route('/catalog/<str:category>/<str:item>/delete')
+@app.route('/catalog/<category>/<item>/delete')
 def delete_item(category, item):
     if 'username' not in login_session:
         return redirect('/login')
