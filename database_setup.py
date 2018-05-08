@@ -44,7 +44,6 @@ class Item(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(80), nullable=False)
-    description = Column(String(200), nullable=False)
     category_id = Column(Integer, ForeignKey('Category.id'))
     category = relationship(Category)
     user_id = Column(Integer, ForeignKey("User.id"))

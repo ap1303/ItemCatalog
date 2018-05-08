@@ -63,6 +63,7 @@ def show_items(category):
 @app.route('/catalog/<str:category>/<str:item>')
 def show_item(category, item):
     output = '<div>{0}'.format(item)
+    output += session.query(Item).filter_by(name=item).one().description
     edit_super_link = '<a href="/catalog/{0}/{1}/edit">edit</a>'.format(category, item)
     output += edit_super_link
     delete_super_link = '<a href="/catalog/{0}/{1}/delete">delete</a>'.format(category, item)
