@@ -23,6 +23,7 @@ session = DBSession()
 def home_page():
     output = ''
 
+    # display the categories as hyperlinks to their respective item lists
     output += 'categories'
     output += '</br>'
     categories = session.query(Category).all()
@@ -30,15 +31,16 @@ def home_page():
         output += '<a href="/catalog/{0}/items">{1}</a>'.format(cat.name, cat.name)
         output += '</br>'
 
-    if 'username' in login_session:
+    if 'username' in login_session:  # user is logged in
         output += '<a href="catalog/new">Add Item</a>'
         output += '</br>'
         output += '<a href="/gdisconnect">Disconnect</a>'
         output += '</br>'
-    else:
+    else:  # user is not logged in
         output += '<a href="/login">Connect</a>'
         output += '</br>'
 
+    # hyperlink to the JSON Endpoint
     output += '<a href="/catalog.json">JSON</a>'
 
     return output
@@ -46,6 +48,7 @@ def home_page():
 
 @app.route('/catalog/<category>/items')
 def show_items(category):
+    # Retrieve items for category and display them as hyperlinks to their respective pages
     cat = session.query(Category).filter_by(name=category).one()
     items = session.query(Item).filter_by(category=cat).all()
     output = ''
@@ -53,10 +56,10 @@ def show_items(category):
         output += '<a href="/catalog/{0}/{1}">{2}</a>'.format(category, item.name, item.name)
         output += '</br>'
 
-    if 'username' in login_session:
+    if 'username' in login_session: # user is logged in
         output += '<a href="/gdisconnect">Disconnect</a>'
         output += '</br>'
-    else:
+    else:  # user is not logged in
         output += '<a href="/login">Connect</a>'
         output += '</br>'
     return output
@@ -64,6 +67,7 @@ def show_items(category):
 
 @app.route('/catalog/<category>/<item>')
 def show_item(category, item):
+    # display item as its name, and add hyperlinks to edit, delete it
     output = '<div>{0}'.format(item)
     output += '</br>'
     edit_super_link = '<a href="/catalog/{0}/{1}/edit">edit</a>'.format(category, item)
@@ -74,23 +78,24 @@ def show_item(category, item):
     output += '</br>'
     output += '</div>'
 
-
-    if 'username' in login_session:
+    if 'username' in login_session:  #user logged in
         output += '<a href="/gdisconnect">Disconnect</a>'
         output += '</br>'
-    else:
+    else:  # user not logged in
         output += '<a href="/login">Connect</a>'
         output += '</br>'
+
     return output
 
 
 @app.route('/catalog/new', methods=['GET', 'POST'])
 def add_item():
-    if 'username' not in login_session:
+    if 'username' not in login_session:  # user not logged in
         return redirect('/login')
 
-    if request.method == 'POST':
-        if request.form['name'] and request.form['category']:
+    if request.method == 'POST': # if the method is triggered by clicking the edit button on edit_item.html
+        if request.form['name'] and request.form['category']:  # if both data fields are complete
+            # check for existence of current user in database and if not, add current user to it
             users = session.query(User).all()
             user = User(name=login_session['username'], email=login_session['email'])
             existing = False
@@ -104,6 +109,7 @@ def add_item():
             else:
                 user = session.query(User).filter_by(name=login_session['username']).one()
 
+            # check for existence of given category in database and if not, add given category to it
             categories = session.query(Category).all()
             cat = Category(name=request.form['category'], user=user)
             existing = False
@@ -117,14 +123,14 @@ def add_item():
             else:
                 cat = session.query(Category).filter_by(name=request.form['category']).one()
 
-
+            # add the item to database
             item_to_add = Item(name=request.form['name'], category=cat,
                                user=user)
             session.add(item_to_add)
             session.commit()
 
         return redirect('/')
-    else:
+    else:  # if the method is triggered by clicking the Add button on the home page
         return render_template('add_item.html')
 
 
@@ -134,7 +140,6 @@ def edit_item(category, item):
         return redirect('/login')
 
     item_to_modify = session.query(Item).filter_by(name=item).one()
-
 
     if item_to_modify.user.id != login_session['user_id']:
         response = make_response(json.dumps('Permission denied.'), 403)
@@ -222,25 +227,22 @@ def gconnect():
     if result['issued_to'] != CLIENT_ID:
         response = make_response(
             json.dumps("Token's client ID does not match app's."), 401)
-        print
-        "Token's client ID does not match app's."
         response.headers['Content-Type'] = 'application/json'
         return response
 
     stored_access_token = login_session.get('access_token')
     stored_gplus_id = login_session.get('gplus_id')
     if stored_access_token is not None and gplus_id == stored_gplus_id:
-        response = make_response(json.dumps('Current user is already connected.'),
-                                 200)
+        response = make_response(json.dumps('Current user is already connected.'), 200)
         response.headers['Content-Type'] = 'application/json'
         return response
 
     login_session['access_token'] = credentials.access_token
     login_session['gplus_id'] = gplus_id
 
-    userinfo_url = "https://www.googleapis.com/oauth2/v1/userinfo"
+    user_info_url = "https://www.googleapis.com/oauth2/v1/userinfo"
     params = {'access_token': credentials.access_token, 'alt': 'json'}
-    answer = requests.get(userinfo_url, params=params)
+    answer = requests.get(user_info_url, params=params)
 
     data = answer.json()
 
@@ -260,24 +262,13 @@ def gconnect():
 def gdisconnect():
     access_token = login_session.get('access_token')
     if access_token is None:
-        print
-        'Access Token is None'
         response = make_response(json.dumps('Current user not connected.'), 401)
         response.headers['Content-Type'] = 'application/json'
         return response
-    print
-    'In gdisconnect access token is %s', access_token
-    print
-    'User name is: '
-    print
-    login_session['username']
+
     url = 'https://accounts.google.com/o/oauth2/revoke?token=%s' % login_session['access_token']
     h = httplib2.Http()
     result = h.request(url, 'GET')[0]
-    print
-    'result is '
-    print
-    result
     if result['status'] == '200':
         del login_session['access_token']
         del login_session['gplus_id']

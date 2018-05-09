@@ -1,0 +1,2 @@
+For running the app, run 'python database_setup.py' first to initialize the database, and run 'python project.py' to initiate the server process.
+After initiating the server process, open the browser and visit port 5000 of localhost. By now, the application should be up and running!
