@@ -15,6 +15,15 @@ class User(Base):
     email = Column(String(250), nullable=False)
     picture = Column(String(250))
 
+    @property
+    def serialize(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'picture_url': self.picture,
+        }
+
 
 class Category(Base):
     __tablename__ = 'Category'
@@ -25,17 +34,12 @@ class Category(Base):
     user = relationship(User)
 
     @property
-    def serialize(self, category_items):
-        items = []
-        for item in category_items:
-            if item.user_id == id:
-                items.append(item.serialize)
+    def serialize(self):
         return {
             'id': self.id,
             'name': self.name,
             'user_id': self.user_id,
-            'user': self.user,
-            'items': items,
+            'user': self.user.serialize,
         }
 
 
@@ -54,11 +58,10 @@ class Item(Base):
         return {
             'id': self.id,
             'name': self.name,
-            'last_modified': self.last_modified,
             'category_id': self.category_id,
-            'category': self.category,
+            'category': self.category.name,
             'user_id': self.user_id,
-            'user': self.user,
+            'user': self.user.name,
         }
 
 

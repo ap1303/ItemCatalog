@@ -13,7 +13,7 @@ import requests
 app = Flask(__name__)
 
 CLIENT_ID = json.loads(open('client_secrets.json', 'r').read())['web']['client_id']
-engine = create_engine('sqlite:///categorywithusers.db')
+engine = create_engine('sqlite:///categorywithusers.db?check_same_thread=False')
 Base.metadata.bind = engine
 DBSession = sessionmaker(bind=engine)
 session = DBSession()
@@ -39,6 +39,8 @@ def home_page():
         output += '<a href="/login">Connect</a>'
         output += '</br>'
 
+    output += '<a href="/catalog.json">JSON</a>'
+
     return output
 
 
@@ -52,8 +54,6 @@ def show_items(category):
         output += '</br>'
 
     if 'username' in login_session:
-        output += '<a href="catalog/new">Add Item</a>'
-        output += '</br>'
         output += '<a href="/gdisconnect">Disconnect</a>'
         output += '</br>'
     else:
@@ -85,29 +85,44 @@ def show_item(category, item):
 
 
 @app.route('/catalog/new', methods=['GET', 'POST'])
-def new_item():
+def add_item():
     if 'username' not in login_session:
         return redirect('/login')
 
     if request.method == 'POST':
         if request.form['name'] and request.form['category']:
-            item_to_add = Item(name=request.form['name'], category=request.form['category'],
-                               user=login_session['username'])
+            users = session.query(User).all()
+            user = User(name=login_session['username'], email=login_session['email'])
+            existing = False
+            for usr in users:
+                if usr.name == user.name:
+                    existing = True
+                    break
+            if not existing:
+                session.add(user)
+                session.commit()
+            else:
+                user = session.query(User).filter_by(name=login_session['username']).one()
+
+            categories = session.query(Category).all()
+            cat = Category(name=request.form['category'], user=user)
+            existing = False
+            for category in categories:
+                if category.name == cat.name:
+                    existing = True
+                    break
+            if not existing:
+                session.add(user)
+                session.commit()
+            else:
+                cat = session.query(Category).filter_by(name=request.form['category']).one()
+
+
+            item_to_add = Item(name=request.form['name'], category=cat,
+                               user=user)
             session.add(item_to_add)
             session.commit()
 
-            new_category = request.form['category']
-            categories = session.query(Category).all()
-            i = 0
-            for category in categories:
-                if category.name == new_category:
-                    break
-                else:
-                    i += 1
-            if i == len(categories):
-                category = Category(name=request.form['category'], user=login_session['username'])
-                session.add(category)
-                session.commit()
         return redirect('/')
     else:
         return render_template('add_item.html')
@@ -120,7 +135,8 @@ def edit_item(category, item):
 
     item_to_modify = session.query(Item).filter_by(name=item).one()
 
-    if item_to_modify.user.name != login_session['username']:
+
+    if item_to_modify.user.id != login_session['user_id']:
         response = make_response(json.dumps('Permission denied.'), 403)
         response.headers['Content-Type'] = 'application/json'
         return response
@@ -130,7 +146,7 @@ def edit_item(category, item):
             item_to_modify.name = request.form['name']
         session.add(item_to_modify)
         session.commit()
-        return redirect(url_for('show_item', category=category, item=item))
+        return redirect(url_for('show_item', category=category, item=item_to_modify.name))
     else:
         return render_template('edit_item.html', category=category, item=item_to_modify)
 
@@ -154,8 +170,10 @@ def delete_item(category, item):
 
 @app.route('/catalog.json')
 def json_endpoint():
+    users = session.query(User).all()
     categories = session.query(Category).all()
-    return jsonify(Categories=[category.serialize for category in categories])
+    items = session.query(Item).all()
+    return jsonify(Users=[user.serialize for user in users], Categories=[category.serialize for category in categories], Items=[item.serialize for item in items])
 
 
 @app.route('/login')
@@ -235,7 +253,7 @@ def gconnect():
         user_id = create_user(login_session)
     login_session['user_id'] = user_id
 
-    return None
+    return redirect('/')
 
 
 @app.route('/gdisconnect')
