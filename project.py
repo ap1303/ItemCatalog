@@ -68,7 +68,7 @@ def show_items(category, access_token):
     if access_token != '':
         result = check_access_token(access_token)
         if result is not None:
-            return result
+            return redirect('/login')
         for item in items:
             output += '<a href="/catalog/{0}/{1}/{2}">{3}</a>'.format(category, item.name, access_token, item.name)
             output += '</br>'
@@ -94,7 +94,7 @@ def add_item_to_category(category, access_token):
 
     result = check_access_token(access_token)
     if result is not None:
-        return result
+        return redirect('/login')
 
     if request.method == 'POST': # if the method is triggered by clicking the add button
         if request.form['name']: # if data is complete
@@ -133,7 +133,7 @@ def show_item(category, item, access_token):
         if access_token in login_session:
             result = check_access_token(access_token)
             if result is not None:
-                return result
+                return redirect('/login')
             try:
                 item_to_show = session.query(Item).filter_by(name=item).one()
             except NoResultFound:
@@ -199,11 +199,11 @@ def get_user_id(email):
 
 def check_access_token(access_token):
     if access_token not in login_session:
-        return 'not logged in', redirect('/login')
+        return 'not logged in'
     else:
         timedelta = datetime.now() - login_session[access_token]['last_click']
         if timedelta.seconds > 1800:
-            return 'Session timeout', redirect('/login')
+            return 'Session timeout'
         else:
             return None
 
@@ -228,7 +228,7 @@ def add_item(access_token):
 
     result = check_access_token(access_token)
     if result is not None:
-        return result
+        return redirect('/login')
 
     if request.method == 'POST': # if the method is triggered by clicking the edit button on edit_item.html
         if request.form['name'] and request.form['category']:  # if both data fields are complete
@@ -272,7 +272,7 @@ def edit_item(category, item, access_token):
 
     result = check_access_token(access_token)
     if result is not None:
-        return result
+        return redirect('/login')
 
     item_to_modify = session.query(Item).filter_by(name=item).one()
 
@@ -299,7 +299,7 @@ def delete_item(category, item, access_token):
 
     result = check_access_token(access_token)
     if result is not None:
-        return result
+        return redirect('/login')
 
     try:
        item_to_delete = session.query(Item).filter_by(name=item).one()
