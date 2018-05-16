@@ -15,11 +15,9 @@
       <span class="g-signin"
         data-scope="openid email"
         data-clientid="867374320147-h1pdvik25t1b989s51uivjierg5fr701.apps.googleusercontent.com"
-        data-redirecturi="postmessage"
         data-accesstype="offline"
         data-cookiepolicy="single_host_origin"
-        data-callback="signInCallback"
-        data-approvalprompt="force">
+        data-callback="signInCallback">
       </span>
     </div>
 
@@ -37,7 +35,7 @@
             contentType: 'application/octet-stream; charset=utf-8',
             success: function(result) {
                        if (result) {
-                         
+                         $('#result').html(result);
                        } else if (authResult['error']) {
                          console.log('There was an error: ' + authResult['error']);
                        } else {

@@ -5,6 +5,8 @@ from database_setup import Base, Category, Item, User
 from flask import session as login_session
 from oauth2client.client import flow_from_clientsecrets
 from oauth2client.client import FlowExchangeError
+from sqlalchemy.orm.exc import NoResultFound
+from datetime import datetime
 import random, string
 import httplib2
 import json
@@ -17,13 +19,17 @@ engine = create_engine('sqlite:///categorywithusers.db?check_same_thread=False')
 Base.metadata.bind = engine
 DBSession = sessionmaker(bind=engine)
 session = DBSession()
+activation_time = datetime.now()
 
 
-@app.route('/<access_token>')
-@app.route('/', defaults={'access_token':''})
+@app.route('/catalog/homepage/<access_token>')
+@app.route('/catalog/homepage', defaults={'access_token':''})
 def home_page(access_token):
-    output = ''
+    timedelta = datetime.now() - activation_time
+    if timedelta.seconds > 3600:
+        clean_session_data()
 
+    output = ''
     # display the categories as hyperlinks to their respective item lists
     output += 'categories'
     output += '</br>'
@@ -31,68 +37,138 @@ def home_page(access_token):
     for cat in categories:
         output += '<a href="/catalog/{0}/items/{1}">{2}</a>'.format(cat.name, access_token, cat.name)
         output += '</br>'
-
-    if 'username' in login_session:  # user is logged in
-        output += '<a href="catalog/new/{0}">Add Item</a>'.format(access_token)
+    if access_token in login_session and len(access_token) != 0:  # user is logged in
+        output += '<a href="/catalog/new/{0}">Add Item</a>'.format(access_token)
         output += '</br>'
-        output += '<a href="/gdisconnect">Disconnect</a>'
+        output += '<a href="/gdisconnect/{0}">Disconnect</a>'.format(access_token)
         output += '</br>'
     else:  # user is not logged in
         output += '<a href="/login">Connect</a>'
         output += '</br>'
 
-    # hyperlink to the JSON Endpoint
     output += '<a href="/catalog.json">JSON</a>'
-
     return output
 
 
 @app.route('/catalog/<category>/items/<access_token>')
-@app.route('/catalog/<category>/items', defaults={'access_token':''})
+@app.route('/catalog/<category>/items/', defaults={'access_token':''})
 def show_items(category, access_token):
-    # Retrieve items for category and display them as hyperlinks to their respective pages
-    cat = session.query(Category).filter_by(name=category).one()
+    timedelta = datetime.now() - activation_time
+    if timedelta.seconds > 3600:
+        clean_session_data()
+
+    try:
+        cat = session.query(Category).filter_by(name=category).one()
+    except NoResultFound:
+        response = make_response(json.dumps('No such category. '), 404)
+        response.headers['Content-Type'] = 'application/json'
+        return response
     items = session.query(Item).filter_by(category=cat).all()
     output = ''
-    for item in items:
-        output += '<a href="/catalog/{0}/{1}/{2}">{3}</a>'.format(category, item.name, access_token, item.name)
+    if access_token != '':
+        result = check_access_token(access_token)
+        if result is not None:
+            return result
+        for item in items:
+            output += '<a href="/catalog/{0}/{1}/{2}">{3}</a>'.format(category, item.name, access_token, item.name)
+            output += '</br>'
+        output += '<a href="/catalog/{0}/new/{1}">Add Item</a>'.format(category, access_token)
         output += '</br>'
-
-    if 'username' in login_session: # user is logged in
-        output += '<a href="/gdisconnect">Disconnect</a>'
+        output += '<a href="/gdisconnect/{0}">Disconnect</a>'.format(access_token)
         output += '</br>'
-    else:  # user is not logged in
+    else:
+        for item in items:
+            output += '<a href="/catalog/{0}/{1}/{2}">{3}</a>'.format(category, item.name, access_token, item.name)
+            output += '</br>'
         output += '<a href="/login">Connect</a>'
         output += '</br>'
+
     return output
 
 
+@app.route('/catalog/<category>/new/<access_token>', methods=['POST', 'GET'])
+def add_item_to_category(category, access_token):
+    timedelta = datetime.now() - activation_time
+    if timedelta.seconds > 3600:
+        clean_session_data()
+
+    result = check_access_token(access_token)
+    if result is not None:
+        return result
+
+    if request.method == 'POST': # if the method is triggered by clicking the add button
+        if request.form['name']: # if data is complete
+            # add the item to database
+            user = session.query(User).filter_by(name=login_session[access_token]['username']).one()
+            try:
+                cat = session.query(Category).filter_by(name=category).one()
+            except NoResultFound:
+                response = make_response(json.dumps('No such category'), 404)
+                response.headers['Content-Type'] = 'application/json'
+                return response
+            item_to_add = Item(name=request.form['name'], category=cat,
+                               user=user)
+            names = [item.name for item in session.query(Item).all()]
+            if request.form['name'] not in names:
+                session.add(item_to_add)
+                session.commit()
+            else:
+                return render_template('add_item_failure.html', category=category, access_token=access_token)
+        return redirect('/catalog/{0}/items/{1}'.format(category, access_token))
+    else:  # if the method is triggered by clicking the Add button on the home page
+        return render_template('add_item_to_category.html', category=category, access_token=access_token)
+
+
 @app.route('/catalog/<category>/<item>/<access_token>')
-@app.route('/catalog/<category>/<item>', defaults={'access_token':''})
+@app.route('/catalog/<category>/<item>/', defaults={'access_token':''})
 def show_item(category, item, access_token):
+    timedelta = datetime.now() - activation_time
+    if timedelta.seconds > 3600:
+        clean_session_data()
+
     # display item as its name, and add hyperlinks to edit, delete it
     output = '<div>{0}'.format(item)
     output += '</br>'
-    edit_super_link = '<a href="/catalog/{0}/{1}/edit/{2}">edit</a>'.format(category, item, access_token)
-    output += edit_super_link
-    output += '</br>'
-    delete_super_link = '<a href="/catalog/{0}/{1}/delete/{2}">delete</a>'.format(category, item, access_token)
-    output += delete_super_link
-    output += '</br>'
-    output += '</div>'
+    if access_token != '':
+        if access_token in login_session:
+            result = check_access_token(access_token)
+            if result is not None:
+                return result
+            try:
+                item_to_show = session.query(Item).filter_by(name=item).one()
+            except NoResultFound:
+                response = make_response(json.dumps('No such item. '), 404)
+                response.headers['Content-Type'] = 'application/json'
+                return response
 
-    if 'username' in login_session:  #user logged in
-        output += '<a href="/gdisconnect">Disconnect</a>'
-        output += '</br>'
-    else:  # user not logged in
+            if login_session[access_token]['username'] == item_to_show.user.name:
+                edit_super_link = '<a href="/catalog/{0}/{1}/edit/{2}">edit</a>'.format(category, item, access_token)
+                output += edit_super_link
+                output += '</br>'
+                delete_super_link = '<a href="/catalog/{0}/{1}/delete/{2}">delete</a>'.format(category, item, access_token)
+                output += delete_super_link
+                output += '</br>'
+            output += '<a href="/gdisconnect/{0}">Disconnect</a>'.format(access_token)
+            output += '</br>'
+        else:
+            response = make_response(json.dumps('Invalid session.'), 401)
+            response.headers['Content-Type'] = 'application/json'
+            return response
+    else:
         output += '<a href="/login">Connect</a>'
         output += '</br>'
+
+    output += '</div>'
 
     return output
 
 
 @app.route('/catalog.json')
 def json_endpoint():
+    timedelta = datetime.now() - activation_time
+    if timedelta.seconds > 3600:
+        clean_session_data()
+
     users = session.query(User).all()
     categories = session.query(Category).all()
     items = session.query(Item).all()
@@ -117,73 +193,59 @@ def get_user_id(email):
     try:
         user = session.query(User).filter_by(email=email).one()
         return user.id
-    except:
+    except NoResultFound:
         return None
 
 
-def refresh():
-    json_data = open('client_secrets.json')
-    client_secrets = json.load(json_data)
-    client_id = client_secrets['web']['client_id']
-    client_secret = client_secrets['web']['client_secret']
-    refresh_url = 'https://www.googleapis.com/oauth2/v4/token?refresh_token={0}&client_id={1}client_secret={2}&grant_type=refresh_token'.format(login_session['refresh_token'], client_id, client_secret)
-    request = httplib2.Http().request(refresh_url, 'POST')
-    result = json.loads(request[1])
-    request_info = request[0]
-    if request_info['status'] == '200':
-        login_session['access_token'] = result['access_token']
-        return ('200', login_session['access_token'])
-    else:
-        return (request_info['status'], 'Failed to obtain access token')
-
-
 def check_access_token(access_token):
-    if access_token != login_session['access_token']:
-        return redirect('/login')
+    if access_token not in login_session:
+        return 'not logged in', redirect('/login')
     else:
-        refresh_tuple = refresh()
-        if refresh_tuple[0] == '200':
-            login_session['access_token'] = refresh_tuple[1]
-            return None
+        timedelta = datetime.now() - login_session[access_token]['last_click']
+        if timedelta.seconds > 1800:
+            return 'Session timeout', redirect('/login')
         else:
-            return redirect('/login')
+            return None
+
+
+def clean_session_data():
+    keys = login_session.keys()
+    print keys
+    for user in keys:
+        last_click = login_session[user]['last_click']
+        timedelta = datetime.now() - last_click
+        if timedelta.seconds > 1800:
+            del login_session[user]
+
+
 
 
 @app.route('/catalog/new/<access_token>', methods=['GET', 'POST'])
 def add_item(access_token):
-    if 'username' not in login_session:  # user not logged in
-        return redirect('/login')
+    timedelta = datetime.now() - activation_time
+    if timedelta.seconds > 3600:
+        clean_session_data()
 
     result = check_access_token(access_token)
-    if result != None:
+    if result is not None:
         return result
 
     if request.method == 'POST': # if the method is triggered by clicking the edit button on edit_item.html
         if request.form['name'] and request.form['category']:  # if both data fields are complete
             # check for existence of current user in database and if not, add current user to it
-            users = session.query(User).all()
-            user = User(name=login_session['username'], email=login_session['email'])
-            existing = False
-            for usr in users:
-                if usr.name == user.name:
-                    existing = True
-                    break
-            if not existing:
+            usernames = [item.name for item in session.query(User).all()]
+            user = User(name=login_session[access_token]['username'], email=login_session[access_token]['email'])
+            if user.name not in usernames:
                 session.add(user)
                 session.commit()
             else:
-                user = session.query(User).filter_by(name=login_session['username']).one()
+                user = session.query(User).filter_by(name=login_session[access_token]['username']).one()
 
             # check for existence of given category in database and if not, add given category to it
-            categories = session.query(Category).all()
+            categories = [item.name for item in session.query(Category).all()]
             cat = Category(name=request.form['category'], user=user)
-            existing = False
-            for category in categories:
-                if category.name == cat.name:
-                    existing = True
-                    break
-            if not existing:
-                session.add(user)
+            if cat.name not in categories:
+                session.add(cat)
                 session.commit()
             else:
                 cat = session.query(Category).filter_by(name=request.form['category']).one()
@@ -191,26 +253,30 @@ def add_item(access_token):
             # add the item to database
             item_to_add = Item(name=request.form['name'], category=cat,
                                user=user)
-            session.add(item_to_add)
-            session.commit()
-
-        return redirect('/{0}'.format(login_session['access_token']))
+            names = [item.name for item in session.query(Item).all()]
+            if request.form['name'] not in names:
+                session.add(item_to_add)
+                session.commit()
+            else:
+                return render_template('add_item_failure.html', access_token=access_token)
+        return redirect('/catalog/homepage/{0}'.format(access_token))
     else:  # if the method is triggered by clicking the Add button on the home page
-        return render_template('add_item.html')
+        return render_template('add_item.html', access_token=access_token)
 
 
 @app.route('/catalog/<category>/<item>/edit/<access_token>', methods=['GET', 'POST'])
 def edit_item(category, item, access_token):
-    if 'username' not in login_session:
-        return redirect('/login')
+    timedelta = datetime.now() - activation_time
+    if timedelta.seconds > 3600:
+        clean_session_data()
 
-    result = check_access_token()
-    if result != None:
+    result = check_access_token(access_token)
+    if result is not None:
         return result
 
     item_to_modify = session.query(Item).filter_by(name=item).one()
 
-    if item_to_modify.user.id != login_session['user_id']:
+    if item_to_modify.user.id != get_user_id(login_session[access_token]['email']):
         response = make_response(json.dumps('Permission denied.'), 403)
         response.headers['Content-Type'] = 'application/json'
         return response
@@ -220,45 +286,59 @@ def edit_item(category, item, access_token):
             item_to_modify.name = request.form['name']
         session.add(item_to_modify)
         session.commit()
-        return redirect(url_for('show_item', category=category, item=item_to_modify.name))
+        return redirect(url_for('show_item', category=category, item=item_to_modify.name, access_token=access_token))
     else:
-        return render_template('edit_item.html', category=category, item=item_to_modify)
+        return render_template('edit_item.html', category=category, item=item_to_modify, access_token=access_token)
 
 
 @app.route('/catalog/<category>/<item>/delete/<access_token>')
-def delete_item(category, item):
-    if 'username' not in login_session:
-        return redirect('/login')
+def delete_item(category, item, access_token):
+    timedelta = datetime.now() - activation_time
+    if timedelta.seconds > 3600:
+        clean_session_data()
 
-    result = check_access_token()
-    if result != None:
+    result = check_access_token(access_token)
+    if result is not None:
         return result
 
-    item_to_delete = session.query(Item).filter_by(name=item).one()
+    try:
+       item_to_delete = session.query(Item).filter_by(name=item).one()
+       category_instance = item_to_delete.category
+    except NoResultFound:
+       print item
 
-    if item_to_delete.user_id != login_session['user_id']:
+    if item_to_delete.user_id != get_user_id(login_session[access_token]['email']):
         response = make_response(json.dumps('Permission denied.'), 403)
         response.headers['Content-Type'] = 'application/json'
         return response
 
     session.delete(item_to_delete)
     session.commit()
-    return redirect('/catalog/%s/items' % category)
+
+    items = [item.name for item in session.query(Item).filter_by(category=category_instance).all()]
+    if len(items) == 0:
+        session.delete(session.query(Category).filter_by(name=category).one())
+        session.commit()
+        return redirect('/catalog/homepage/{0}'.format(access_token))
+    return redirect('/catalog/{0}/items/{1}'.format(category, access_token))
 
 
 @app.route('/login')
 def show_login():
-    state = ''.join(random.choice(string.ascii_uppercase + string.digits) for x in xrange(32))
+    state = ''.join(random.choice(string.ascii_uppercase + string.digits) for x in range(32))
     login_session['state'] = state
     return render_template('login.html', STATE=state)
 
 
 @app.route('/gconnect', methods=['POST'])
-def gconnect(access_token):
+def gconnect():
     if request.args.get('state') != login_session['state']:
         response = make_response(json.dumps('Invalid state parameter.'), 401)
         response.headers['Content-Type'] = 'application/json'
         return response
+
+    state = login_session['state']
+    del login_session['state']
 
     code = request.data
 
@@ -271,8 +351,9 @@ def gconnect(access_token):
         response.headers['Content-Type'] = 'application_code'
         return response
 
-
     access_token = credentials.access_token
+    refresh_token = credentials.refresh_token
+    print('access: {0}, refresh: {1}'.format(access_token, refresh_token))
     url = ('https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=%s'
            % access_token)
     h = httplib2.Http()
@@ -296,61 +377,51 @@ def gconnect(access_token):
         response.headers['Content-Type'] = 'application/json'
         return response
 
-    stored_access_token = login_session.get('access_token')
-    stored_gplus_id = login_session.get('gplus_id')
-    if stored_access_token is not None and gplus_id == stored_gplus_id:
+    if access_token in login_session and gplus_id == login_session[access_token][gplus_id]:
         response = make_response(json.dumps('Current user is already connected.'), 200)
         response.headers['Content-Type'] = 'application/json'
         return response
 
-    login_session['access_token'] = credentials.access_token
-    login_session['refresh_token'] = credentials.refresh_token
-    login_session['gplus_id'] = gplus_id
+    dict = {}
+    dict['last_click'] = datetime.now()
+    dict['state'] = state
+    dict['refresh_token'] = refresh_token
+    dict['gplus_id'] = gplus_id
 
     user_info_url = "https://www.googleapis.com/oauth2/v1/userinfo"
-    params = {'access_token': credentials.access_token, 'alt': 'json'}
+    params = {'access_token': access_token, 'alt': 'json'}
     answer = requests.get(user_info_url, params=params)
 
     data = answer.json()
 
-    login_session['username'] = data['name']
-    login_session['picture'] = data['picture']
-    login_session['email'] = data['email']
+    dict['username'] = data['name']
+    dict['picture'] = data['picture']
+    dict['email'] = data['email']
 
-    user_id = get_user_id(login_session['email'])
-    if not user_id:
-        user_id = create_user(login_session)
-    login_session['user_id'] = user_id
+    login_session[access_token] = dict
 
-    return redirect('/{0}'.format(login_session['access_token']))
+    return redirect('/catalog/homepage/{0}'.format(access_token))
 
 
-@app.route('/gdisconnect')
-def gdisconnect():
-    access_token = login_session.get('access_token')
-    if access_token is None:
+@app.route('/gdisconnect/<access_token>')
+def gdisconnect(access_token):
+    if len(access_token) == 0:
         response = make_response(json.dumps('Current user not connected.'), 401)
         response.headers['Content-Type'] = 'application/json'
         return response
 
-    url = 'https://accounts.google.com/o/oauth2/revoke?token=%s' % login_session['access_token']
+    url = 'https://accounts.google.com/o/oauth2/revoke?token={0}'.format(access_token)
     h = httplib2.Http()
     result = h.request(url, 'GET')[0]
-    if result['status'] == '200':
-        del login_session['access_token']
-        del login_session['gplus_id']
-        del login_session['username']
-        del login_session['email']
-        del login_session['picture']
-        response = make_response(json.dumps('Successfully disconnected.'), 200)
-        response.headers['Content-Type'] = 'application/json'
-        return response
+    if result['status'] == '200' or result['status'] == '400':
+        del login_session[access_token]
+        return redirect('/catalog/homepage')
     else:
-        json_string = 'Failed to revoke token {0} for given user with status code {1}'.format(login_session['access_token'], result['status'])
+        json_string = 'Failed to revoke token {0} for given user with status code {1}'.format(access_token, result['status'])
         response = make_response(json.dumps(json_string, 400))
         response.headers['Content-Type'] = 'application/json'
         return response
-        
+
 
 if __name__ == '__main__':
     app.secret_key = 'secret key'

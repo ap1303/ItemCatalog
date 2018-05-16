@@ -1,0 +1,9 @@
+<html>
+<body>
+{% if category %}
+<a href= '{{url_for('show_items', category=category, access_token=access_token)}}'>Item already in database. Click here to go back</a>
+{% else %}
+<a href= '{{url_for('home_page', access_token=access_token)}}'>Item already in database. Click here to go back</a>
+{% endif %}
+</body>
+</html>
