@@ -400,6 +400,10 @@ def gconnect():
 
     login_session[access_token] = dict
 
+    user = User(name=data['name'], email=data['email'])
+    session.add(user)
+    session.commit()
+
     return redirect('/catalog/homepage/{0}'.format(access_token))
 
 
