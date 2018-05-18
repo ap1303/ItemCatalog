@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title> Catalog App </title>
+  <link rel="stylesheet" href="static/styles.css">
+</head>
+
+<body>
+  <div class="topnav">
+    <a href='{{url_for('json_endpoint')}}'>JSON</a>
+    {% if access_token %}
+    <a href='{{url_for('add_item', access_token=access_token)}}'>Add item</a>
+    <a href='{{url_for('show_logout', access_token=access_token)}}'>Disconnect</a>
+    {% else %}
+    <a href='{{url_for('show_login')}}'>Connect</a>
+    {% endif %}
+  </div>
+
+  <div>
+    {% for category in categories %}
+    <a class="category" href='{{url_for('show_items', category=category, access_token=access_token)}}'>{{ category }}</div>
+    {% endfor %}
+  </div>
+</body>
+
+</html>

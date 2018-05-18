@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>logout</title>
+</head>
+
+<body>
+  <p>Are you sure you want to logout?</p>
+
+  <a href='{{url_for('gdisconnect', access_token=access_token)}}'>Disconnect</a>
+  <a href='{{url_for('home_page', access_token=access_token)}}'>Cancel</a>
+
+</body>
+</html>

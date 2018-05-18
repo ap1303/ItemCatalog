@@ -5,6 +5,12 @@
 <p>Name:</p>
 <input type = 'text' size='30' name = 'name' placeholder = '{{item.name}}'>
 
+<p>Category:</p>
+<input type = 'text' size='30' name = 'category'>
+
+<p>Description:</p>
+<input type = 'text' size='100' name = 'description'>
+
 <input type='submit' value='Edit'>
 </form>
 <a href= '{{url_for('show_item', category = category, item = item.name, access_token=access_token)}}'>Cancel</a>

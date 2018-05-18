@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title> Show item </title>
+  <link rel="stylesheet" href="static/styles.css">
+</head>
+
+<body>
+  <div class="topnav">
+    <a href='{{url_for('home_page', access_token=access_token)}}'>Home</a>
+    <a href='{{url_for('json_endpoint')}}'>JSON</a>
+    {% if access_token %}
+    {% if current_user == item_username %}
+    <a href='{{url_for('edit_item', category=category, item=item, access_token=access_token)}}'>edit</a>
+    <a href='{{url_for('delete_item', category=category, item=item, access_token=access_token)}}'>delete</a>
+    {% endif %}
+    <a href='{{url_for('show_logout', access_token=access_token)}}'>Disconnect</a>
+    {% else %}
+    <a href='{{url_for('show_login')}}'>Connect</a>
+    {% endif %}
+  </div>
+
+  <div>{{item}}
+    {{ description }}
+  </div>
+</body>
+
+</html>
