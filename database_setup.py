@@ -2,7 +2,7 @@ from sqlalchemy import Column, ForeignKey, Integer, String, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy import create_engine
-from datetime import datetime
+
 
 Base = declarative_base()
 
@@ -59,7 +59,7 @@ class Item(Base):
         return {
             'id': self.id,
             'name': self.name,
-            'description': self.description
+            'description': self.description,
             'category_id': self.category_id,
             'category': self.category.name,
             'user_id': self.user_id,

@@ -52,7 +52,7 @@ def show_items(category, access_token):
         return response
     items = session.query(Item).filter_by(category=cat).all()
 
-    return render_template('show_items', category=category, items=items, access_token=access_token)
+    return render_template('show_items.html', category=category, items=items, access_token=access_token)
 
 
 @app.route('/catalog/<category>/new/<access_token>', methods=['POST', 'GET'])
@@ -163,7 +163,6 @@ def check_access_token(access_token):
 
 def clean_session_data():
     keys = login_session.keys()
-    print keys
     for user in keys:
         last_click = login_session[user]['last_click']
         timedelta = datetime.now() - last_click
@@ -272,10 +271,10 @@ def delete_item(category, item, access_token):
 
     if request.method == 'POST':
         try:
-           item_to_delete = session.query(Item).filter_by(name=item).one()
-           category_instance = item_to_delete.category
+            item_to_delete = session.query(Item).filter_by(name=item).one()
+            category_instance = item_to_delete.category
         except NoResultFound:
-           print item
+           print('No rows found')
 
         if item_to_delete.user_id != get_user_id(login_session[access_token]['email']):
             response = make_response(json.dumps('Permission denied.'), 403)
