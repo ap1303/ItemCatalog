@@ -26,7 +26,7 @@ activation_time = datetime.now()
 @app.route('/catalog/homepage', defaults={'access_token':''})
 def home_page(access_token):
     timedelta = datetime.now() - activation_time
-    if timedelta.seconds > 3600:
+    if timedelta.seconds > 10:
         clean_session_data()
 
     categories = session.query(Category).all()
@@ -37,7 +37,7 @@ def home_page(access_token):
 @app.route('/catalog/<category>/items/', defaults={'access_token':''})
 def show_items(category, access_token):
     timedelta = datetime.now() - activation_time
-    if timedelta.seconds > 3600:
+    if timedelta.seconds > 10:
         clean_session_data()
 
     result = check_access_token(access_token)
@@ -58,7 +58,7 @@ def show_items(category, access_token):
 @app.route('/catalog/<category>/new/<access_token>', methods=['POST', 'GET'])
 def add_item_to_category(category, access_token):
     timedelta = datetime.now() - activation_time
-    if timedelta.seconds > 3600:
+    if timedelta.seconds > 10:
         clean_session_data()
 
     result = check_access_token(access_token)
@@ -91,7 +91,7 @@ def add_item_to_category(category, access_token):
 @app.route('/catalog/<category>/<item>/', defaults={'access_token':''})
 def show_item(category, item, access_token):
     timedelta = datetime.now() - activation_time
-    if timedelta.seconds > 3600:
+    if timedelta.seconds > 10:
         clean_session_data()
 
     # display item as its name, and add hyperlinks to edit, delete it
@@ -117,7 +117,7 @@ def show_item(category, item, access_token):
 @app.route('/catalog.json')
 def json_endpoint():
     timedelta = datetime.now() - activation_time
-    if timedelta.seconds > 3600:
+    if timedelta.seconds > 10:
         clean_session_data()
 
     users = session.query(User).all()
@@ -164,10 +164,13 @@ def check_access_token(access_token):
 def clean_session_data():
     keys = login_session.keys()
     for user in keys:
-        last_click = login_session[user]['last_click']
-        timedelta = datetime.now() - last_click
-        if timedelta.seconds > 1800:
-            del login_session[user]
+        try:
+            last_click = login_session[user]['last_click']
+            timedelta = datetime.now() - last_click
+            if timedelta.seconds > 10:
+                del login_session[user]
+        except TypeError:
+            continue
 
 
 
@@ -175,7 +178,7 @@ def clean_session_data():
 @app.route('/catalog/new/<access_token>', methods=['GET', 'POST'])
 def add_item(access_token):
     timedelta = datetime.now() - activation_time
-    if timedelta.seconds > 3600:
+    if timedelta.seconds > 10:
         clean_session_data()
 
     result = check_access_token(access_token)
@@ -191,6 +194,7 @@ def add_item(access_token):
                 session.add(user)
                 session.commit()
             else:
+                print login_session
                 user = session.query(User).filter_by(name=login_session[access_token]['username']).one()
 
             # check for existence of given category in database and if not, add given category to it
